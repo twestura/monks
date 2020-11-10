@@ -51,6 +51,7 @@ def create_out():
             task.source_player = Player.ONE
             task.number_of_units_selected = 1
             task.selected_object_id = monk.reference_id
+            # TODO proper setting of the Monk location directly on the Militia
             task.location_x = x + 1
             task.location_y = y
     scn.write_to_file(FILE_OUTPUT)
