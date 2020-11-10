@@ -58,7 +58,7 @@ def create_out():
 
 
 def view_out():
-    """Debugging file to view the output file. Requires the output exists."""
+    """Prints information about the output file. Requires the output exists."""
     scn = AoE2Scenario.from_file(FILE_OUTPUT)
     tmgr = scn.trigger_manager
     overall_summary = tmgr.get_summary_as_string()
