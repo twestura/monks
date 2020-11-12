@@ -9,6 +9,10 @@ from AoE2ScenarioParser.datasets.techs import Tech
 from AoE2ScenarioParser.datasets.units import Unit
 
 
+# Scouts have 8 conversion resistance.
+# Buildings have 3 conversion resistance.
+
+
 FILE_INPUT = 'monk-test.aoe2scenario'
 FILE_OUTPUT = 'out.aoe2scenario'
 
@@ -17,9 +21,23 @@ FILE_OUTPUT = 'out.aoe2scenario'
 # A Tiny map has 120 * 120 tiles.
 X_MAX = 20
 Y_MAX = 100
+# X_MAX = 10
+# Y_MAX = 10
 # X_MAX = 1
 # Y_MAX = 1
 NUM_TRIALS = X_MAX // 2 * Y_MAX
+
+# The initial and final, inclusive, accuracy values to check.
+# Requires 0 <= ACCURACY_INIT <= ACCURACY_FINAL <= 100.
+ACCURACY_INIT = 0
+ACCURACY_FINAL = 100
+# ACCURACY_INIT = 25
+# ACCURACY_FINAL = 25
+
+# The initial and final, inclusive, conversion resistance values.
+# Requires 0 <= CONV_RES_INIT <= CONV_RES_FINAL.
+CONV_RES_INIT = 0
+CONV_RES_FINAL = 15
 
 
 def create_out():
@@ -35,21 +53,28 @@ def create_out():
     change_obj_stance.source_player = Player.TWO
     change_obj_stance.attack_stance = 3 # No Attack Stance
     accuracy_init = init.add_effect(Effect.MODIFY_ATTRIBUTE)
-    accuracy_init.quantity = 0
+    accuracy_init.quantity = ACCURACY_INIT
     accuracy_init.object_list_unit_id = Unit.MONK
     accuracy_init.source_player = Player.ONE
     accuracy_init.operation = 1 # Set
     accuracy_init.object_attributes = 11 # Accuracy Percent
     tmgr.add_variable('Accuracy Percent', 0)
-    count_init = init.add_effect(Effect.CHANGE_VARIABLE)
-    count_init.quantity = 0
-    count_init.operation = 1 # Set
-    count_init.message = 'Accuracy Percent'
-    count_init.from_variable = 0
-    illumination = init.add_effect(Effect.RESEARCH_TECHNOLOGY)
-    illumination.source_player = Player.ONE
-    illumination.technology = Tech.ILLUMINATION
-    illumination.force_research_technology = 1
+    tmgr.add_variable('Conversion Resistance', 1)
+    count_init_acc = init.add_effect(Effect.CHANGE_VARIABLE)
+    count_init_acc.quantity = ACCURACY_INIT
+    count_init_acc.operation = 1 # Set
+    count_init_acc.message = 'Accuracy Percent'
+    count_init_acc.from_variable = 0
+    count_init_res = init.add_effect(Effect.CHANGE_VARIABLE)
+    count_init_res.quantity = CONV_RES_INIT
+    count_init_res.operation = 1 # Set
+    count_init_res.message = 'Conversion Resistance'
+    count_init_res.from_variable = 1
+    faith_regeneration = init.add_effect(Effect.MODIFY_RESOURCE)
+    faith_regeneration.tribute_list = 35 # Faith
+    faith_regeneration.source_player = Player.ONE
+    faith_regeneration.operation = 1 # Set
+    faith_regeneration.quantity = 3000
     redemption = init.add_effect(Effect.RESEARCH_TECHNOLOGY)
     redemption.technology = Tech.REDEMPTION
     redemption.force_research_technology = 1
@@ -57,16 +82,17 @@ def create_out():
     # Displays the current Accuracy Percent as an objective.
     display = tmgr.add_trigger('Display Accuracy Percent')
     display.display_on_screen = 1
-    display.short_description = 'Accuracy Percent: <Accuracy Percent>'
+    display.short_description = '\n'.join([
+        'Conversion Resistance: <Conversion Resistance>',
+        'Accuracy Percent: <Accuracy Percent>'
+    ])
     gaia_defeated = display.add_condition(Condition.PLAYER_DEFEATED)
     gaia_defeated.source_player = Player.GAIA
 
-    # TODO Monk conversion speed
-    # TODO trigger to "reset" the loop
-
     # Adds the Monks and Militia to the scenario.
     convert = tmgr.add_trigger('Convert')
-    advance_loop = tmgr.add_trigger('Advance Loop')
+    advance_loop_acc = tmgr.add_trigger('Advance Loop Accuracy')
+    advance_loop_res = tmgr.add_trigger('Advance Loop Conversion Resistance')
 
     convert.enabled = 0 # Off
     activate_convert = init.add_effect(Effect.ACTIVATE_TRIGGER)
@@ -84,8 +110,10 @@ def create_out():
     deactivate_convert = convert.add_effect(Effect.DEACTIVATE_TRIGGER)
     deactivate_convert.trigger_id = convert.trigger_id
 
-    activate_advance_loop = convert.add_effect(Effect.ACTIVATE_TRIGGER)
-    activate_advance_loop.trigger_id = advance_loop.trigger_id
+    activate_advance_loop_acc = convert.add_effect(Effect.ACTIVATE_TRIGGER)
+    activate_advance_loop_acc.trigger_id = advance_loop_acc.trigger_id
+    activate_advance_loop_res = convert.add_effect(Effect.ACTIVATE_TRIGGER)
+    activate_advance_loop_res.trigger_id = advance_loop_res.trigger_id
 
     for y in range(Y_MAX):
         for x in range(0, X_MAX, 2):
@@ -108,49 +136,121 @@ def create_out():
             task.selected_object_ids = monk.reference_id
             task.location_object_reference = militia.reference_id
 
-    advance_loop.enabled = 0
-    advance_loop.looping = 1
+    advance_loop_acc.enabled = 0
+    advance_loop_acc.looping = 1
 
-    p2_0_militia = advance_loop.add_condition(Condition.OWN_FEWER_OBJECTS)
-    p2_0_militia.amount_or_quantity = 0
-    p2_0_militia.object_list = Unit.MILITIA
-    p2_0_militia.source_player = Player.TWO
+    p2_0_militia_acc = advance_loop_acc.add_condition(
+        Condition.OWN_FEWER_OBJECTS
+    )
+    p2_0_militia_acc.amount_or_quantity = 0
+    p2_0_militia_acc.object_list = Unit.MILITIA
+    p2_0_militia_acc.source_player = Player.TWO
 
-    accuracy_sub_100 = advance_loop.add_condition(Condition.VARIABLE_VALUE)
-    accuracy_sub_100.amount_or_quantity = 100
+    accuracy_sub_100 = advance_loop_acc.add_condition(Condition.VARIABLE_VALUE)
+    accuracy_sub_100.amount_or_quantity = ACCURACY_FINAL
     accuracy_sub_100.comparison = 1 # Less
     accuracy_sub_100.variable = 0
 
-    deactivate_advance_loop = advance_loop.add_effect(Effect.DEACTIVATE_TRIGGER)
-    deactivate_advance_loop.trigger_id = advance_loop.trigger_id
+    deactivate_advance_loop_acc = advance_loop_acc.add_effect(
+        Effect.DEACTIVATE_TRIGGER
+    )
+    deactivate_advance_loop_acc.trigger_id = advance_loop_acc.trigger_id
+    deactivate_advance_loop_res = advance_loop_acc.add_effect(
+        Effect.DEACTIVATE_TRIGGER
+    )
+    deactivate_advance_loop_res.trigger_id = advance_loop_res.trigger_id
 
-    inc_acc_attr = advance_loop.add_effect(Effect.MODIFY_ATTRIBUTE)
+    inc_acc_attr = advance_loop_acc.add_effect(Effect.MODIFY_ATTRIBUTE)
     inc_acc_attr.quantity = 1
     inc_acc_attr.object_list_unit_id = Unit.MONK
     inc_acc_attr.source_player = Player.ONE
     inc_acc_attr.operation = 2 # Add
     inc_acc_attr.object_attributes = 11 # Accuracy Percent
 
-    inc_acc_var = advance_loop.add_effect(Effect.CHANGE_VARIABLE)
+    inc_acc_var = advance_loop_acc.add_effect(Effect.CHANGE_VARIABLE)
     inc_acc_var.quantity = 1
     inc_acc_var.operation = 2 # Add
     inc_acc_var.from_variable = 0
 
-    militia_ownership = advance_loop.add_effect(Effect.CHANGE_OWNERSHIP)
-    militia_ownership.object_list_unit_id = Unit.MILITIA
-    militia_ownership.source_player = Player.ONE
-    militia_ownership.target_player = Player.TWO
+    militia_ownership_acc = advance_loop_acc.add_effect(Effect.CHANGE_OWNERSHIP)
+    militia_ownership_acc.object_list_unit_id = Unit.MILITIA
+    militia_ownership_acc.source_player = Player.ONE
+    militia_ownership_acc.target_player = Player.TWO
 
-    reactivate_convert = advance_loop.add_effect(Effect.ACTIVATE_TRIGGER)
-    reactivate_convert.trigger_id = convert.trigger_id
+    reactivate_convert_acc = advance_loop_acc.add_effect(
+        Effect.ACTIVATE_TRIGGER
+    )
+    reactivate_convert_acc.trigger_id = convert.trigger_id
+
+
+    p2_0_militia_res = advance_loop_res.add_condition(
+        Condition.OWN_FEWER_OBJECTS
+    )
+    p2_0_militia_res.amount_or_quantity = 0
+    p2_0_militia_res.object_list = Unit.MILITIA
+    p2_0_militia_res.source_player = Player.TWO
+
+    accuracy_is_100 = advance_loop_res.add_condition(Condition.VARIABLE_VALUE)
+    accuracy_is_100.amount_or_quantity = ACCURACY_FINAL
+    accuracy_is_100.comparison = 0 # Equal
+    accuracy_is_100.variable = 0
+
+    res_sub_100 = advance_loop_res.add_condition(Condition.VARIABLE_VALUE)
+    res_sub_100.amount_or_quantity = CONV_RES_FINAL
+    res_sub_100.comparison = 1 # Less
+    res_sub_100.variable = 1
+
+    deactivate_advance_loop_acc2 = advance_loop_res.add_effect(
+        Effect.DEACTIVATE_TRIGGER
+    )
+    deactivate_advance_loop_acc2.trigger_id = advance_loop_res.trigger_id
+    deactivate_advance_loop_res2 = advance_loop_res.add_effect(
+        Effect.DEACTIVATE_TRIGGER
+    )
+    deactivate_advance_loop_res2.trigger_id = advance_loop_res.trigger_id
+
+    reset_acc_attr = advance_loop_res.add_effect(Effect.MODIFY_ATTRIBUTE)
+    reset_acc_attr.quantity = 0
+    reset_acc_attr.object_list_unit_id = Unit.MONK
+    reset_acc_attr.source_player = Player.ONE
+    reset_acc_attr.operation = 1 # Set
+    reset_acc_attr.object_attributes = 11 # Accuracy Percent
+
+    reset_acc_var = advance_loop_res.add_effect(Effect.CHANGE_VARIABLE)
+    reset_acc_var.quantity = 0
+    reset_acc_var.operation = 1 # Set
+    reset_acc_var.from_variable = 0
+
+    inc_res = advance_loop_res.add_effect(Effect.MODIFY_RESOURCE)
+    inc_res.quantity = 1
+    inc_res.tribute_list = 77 # Conversion Resistance
+    inc_res.source_player = Player.ONE
+    inc_res.operation = 2 # Add
+    inc_res_var = advance_loop_res.add_effect(Effect.CHANGE_VARIABLE)
+    inc_res_var.quantity = 1
+    inc_res_var.operation = 2 # Add
+    inc_res_var.from_variable = 1
+
+    militia_ownership_res = advance_loop_res.add_effect(Effect.CHANGE_OWNERSHIP)
+    militia_ownership_res.object_list_unit_id = Unit.MILITIA
+    militia_ownership_res.source_player = Player.ONE
+    militia_ownership_res.target_player = Player.TWO
+
+    start_loop = advance_loop_res.add_effect(Effect.ACTIVATE_TRIGGER)
+    start_loop.trigger_id = convert.trigger_id
 
     # Ends the Scenario when all conversions have been performed
     end_scenario = tmgr.add_trigger('End Scenario')
 
-    accuracy100 = end_scenario.add_condition(Condition.VARIABLE_VALUE)
-    accuracy100.amount_or_quantity = 100
-    accuracy100.comparison = 0 # Equal
-    accuracy100.variable = 0
+    accuracy_final_check = end_scenario.add_condition(Condition.VARIABLE_VALUE)
+    accuracy_final_check.amount_or_quantity = ACCURACY_FINAL
+    accuracy_final_check.comparison = 0 # Equal
+    accuracy_final_check.variable = 0
+
+    conv_res_final_check = end_scenario.add_condition(Condition.VARIABLE_VALUE)
+    conv_res_final_check.amount_or_quantity = CONV_RES_FINAL
+    conv_res_final_check.comparison = 0 # Equal
+    conv_res_final_check.variable = 1
 
     p2_0_militia_end = end_scenario.add_condition(Condition.OWN_FEWER_OBJECTS)
     p2_0_militia_end.amount_or_quantity = 0
