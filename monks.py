@@ -26,18 +26,22 @@ Y_MAX = 100
 # X_MAX = 1
 # Y_MAX = 1
 NUM_TRIALS = X_MAX // 2 * Y_MAX
+assert not (X_MAX & 1), f'X_MAX "{X_MAX}" must be even.'
 
 # The initial and final, inclusive, accuracy values to check.
 # Requires 0 <= ACCURACY_INIT <= ACCURACY_FINAL <= 100.
-ACCURACY_INIT = 0
-ACCURACY_FINAL = 100
-# ACCURACY_INIT = 25
-# ACCURACY_FINAL = 25
+# ACCURACY_INIT = 0
+# ACCURACY_FINAL = 100
+ACCURACY_INIT = 25
+ACCURACY_FINAL = 25
+assert 0 <= ACCURACY_INIT <= ACCURACY_FINAL <= 100
 
 # The initial and final, inclusive, conversion resistance values.
 # Requires 0 <= CONV_RES_INIT <= CONV_RES_FINAL.
 CONV_RES_INIT = 0
-CONV_RES_FINAL = 15
+# CONV_RES_FINAL = 15
+CONV_RES_FINAL = 0
+assert 0 <= CONV_RES_INIT <= CONV_RES_FINAL
 
 
 def create_out():
@@ -45,6 +49,9 @@ def create_out():
     scn = AoE2Scenario.from_file(FILE_INPUT)
     tmgr = scn.trigger_manager
     umgr = scn.unit_manager
+
+    # Adds an invisible object so P2 doesn't get defeated.
+    # umgr.add_unit(Player.TWO, Unit.INVISIBLE_OBJECT, 0.0, 0.0)
 
     # Initializes Militia Attack Stance and Monk Accuracy.
     init = tmgr.add_trigger('Init')
@@ -263,6 +270,67 @@ def create_out():
     scn.write_to_file(FILE_OUTPUT)
 
 
+def single_scenario(x_max=X_MAX, y_max=Y_MAX,
+        file_in=FILE_INPUT, file_out=FILE_OUTPUT):
+    """
+    Writes a single scenario to the output file.
+    """
+    if x_max < 0:
+        raise ValueError(f'x_max "{x_max}" must be nonnegative.')
+    if x_max & 1:
+        raise ValueError(f'x_max "{x_max}" must be even.')
+    if y_max < 0:
+        raise ValueError(f'y_max "{y_max}" must be nonnegative.')
+
+    scn = AoE2Scenario.from_file(file_in)
+    tmgr = scn.trigger_manager
+    umgr = scn.unit_manager
+
+    init = tmgr.add_trigger('Init Set Attack Stance')
+    init.add_effect(Effect.CHANGE_OBJECT_STANCE,
+        object_list_unit_id = Unit.MILITIA,
+        source_player = Player.TWO,
+        attack_stance = 3 # No Attack Stance
+    )
+
+    convert = tmgr.add_trigger('Convert')
+    convert.add_condition(Condition.TIMER, timer=10)
+
+    for y in range(y_max):
+        for x in range(0, x_max, 2):
+            monk = umgr.add_unit(
+                player=Player.ONE,
+                unit_id=Unit.MONK,
+                x=x+0.5,
+                y=y+0.5,
+            )
+            militia = umgr.add_unit(
+                player=Player.TWO,
+                unit_id=Unit.MILITIA,
+                x=x+1.5,
+                y=y+0.5,
+                rotation=16
+            )
+            convert.add_effect(Effect.TASK_OBJECT,
+                source_player = Player.ONE,
+                selected_object_ids = monk.reference_id,
+                location_object_reference = militia.reference_id
+            )
+
+    scn.write_to_file(file_out)
+
+
+def example():
+    """Writes a single example scenario file."""
+    # x, y = 20, 100
+    # x, y = 2, 1
+    # x, y = 20, 10
+    # x, y = 120, 120
+    x, y = 240, 240
+    single_scenario(x, y,
+        'monk-test-giant.aoe2scenario', 'out-giant.aoe2scenario')
+
+
 def view_out():
     """Prints information about the output file. Requires the output exists."""
     scn = AoE2Scenario.from_file(FILE_OUTPUT)
@@ -276,7 +344,8 @@ def view_out():
 
 def main():
     """Creates the test scenario."""
-    create_out()
+    # create_out()
+    example()
     # view_out()
 
 
